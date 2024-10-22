@@ -147,6 +147,9 @@ struct game_capture {
 	bool active;
 	bool capturing;
 	bool activate_hook;
+#ifdef _M_ARM64
+	bool process_is_arm64;
+#endif
 	bool process_is_64bit;
 	bool error_acquiring;
 	bool dwm_capture;
@@ -197,6 +200,9 @@ struct game_capture {
 
 struct graphics_offsets offsets32 = {0};
 struct graphics_offsets offsets64 = {0};
+#ifdef _M_ARM64
+struct graphics_offsets offsetsarm64 = {0};
+#endif // _M_ARM64
 
 static inline bool use_anticheat(struct game_capture *gc)
 {
@@ -676,6 +682,20 @@ static inline bool is_64bit_windows(void)
 #endif
 }
 
+#ifdef _M_ARM64
+static inline bool is_arm64_process(HANDLE process)
+{
+	PROCESS_MACHINE_INFORMATION processMachineInfo;
+	BOOL result =
+		GetProcessInformation(process, ProcessMachineTypeInfo, &processMachineInfo, sizeof(processMachineInfo));
+	if (!result) {
+		printf("Failed to determine process architecture.\n");
+		return false;
+	}
+	return processMachineInfo.ProcessMachine == IMAGE_FILE_MACHINE_ARM64;
+}
+#endif // _M_ARM64
+
 static inline bool is_64bit_process(HANDLE process)
 {
 	BOOL x86 = true;
@@ -696,7 +716,9 @@ static inline bool open_target_process(struct game_capture *gc)
 		warn("could not open process: %s", gc->config.executable);
 		return false;
 	}
-
+#ifdef _M_ARM64
+	gc->process_is_arm64 = is_arm64_process(gc->target_process);
+#endif
 	gc->process_is_64bit = is_64bit_process(gc->target_process);
 	gc->is_app = is_app(gc->target_process);
 	if (gc->is_app) {
@@ -792,8 +814,11 @@ static inline bool init_hook_info(struct game_capture *gc)
 		warn("init_hook_info: user is forcing shared memory "
 		     "(multi-adapter compatibility mode)");
 	}
-
+#ifdef _M_ARM64
+	gc->global_hook_info->offsets = gc->process_is_arm64 ? offsetsarm64: (gc->process_is_64bit ? offsets64 : offsets32);
+#else
 	gc->global_hook_info->offsets = gc->process_is_64bit ? offsets64 : offsets32;
+#endif
 	gc->global_hook_info->capture_overlay = gc->config.capture_overlays;
 	gc->global_hook_info->force_shmem = gc->config.force_shmem;
 	gc->global_hook_info->UNUSED_use_scale = false;
@@ -909,7 +934,11 @@ static inline bool create_inject_process(struct game_capture *gc, const char *in
 	return success;
 }
 
+#ifdef _M_ARM64
+extern char *get_hook_path(bool b64, bool barm64);
+#else
 extern char *get_hook_path(bool b64);
+#endif
 
 static inline bool inject_hook(struct game_capture *gc)
 {
@@ -917,7 +946,16 @@ static inline bool inject_hook(struct game_capture *gc)
 	bool success = false;
 	char *inject_path;
 	char *hook_path;
-
+#ifdef _M_ARM64
+	if (gc->process_is_arm64) {
+		inject_path = obs_module_file("inject-helperarm64.exe");
+	} else if (gc->process_is_64bit) {
+		inject_path = obs_module_file("inject-helper64.exe");
+	} else {
+		inject_path = obs_module_file("inject-helper32.exe");
+	}
+	hook_path = get_hook_path(gc->process_is_64bit, gc->process_is_arm64);
+#else
 	if (gc->process_is_64bit) {
 		inject_path = obs_module_file("inject-helper64.exe");
 	} else {
@@ -925,7 +963,7 @@ static inline bool inject_hook(struct game_capture *gc)
 	}
 
 	hook_path = get_hook_path(gc->process_is_64bit);
-
+#endif
 	if (!check_file_integrity(gc, inject_path, "inject helper")) {
 		goto cleanup;
 	}

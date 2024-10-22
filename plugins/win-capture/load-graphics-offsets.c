@@ -10,6 +10,9 @@
 
 extern struct graphics_offsets offsets32;
 extern struct graphics_offsets offsets64;
+#ifdef _M_ARM64
+extern struct graphics_offsets offsetsarm64;
+#endif
 
 static inline bool load_offsets_from_string(struct graphics_offsets *offsets, const char *str)
 {
@@ -138,8 +141,11 @@ failed:
 	config_close(config);
 	return !ver_mismatch;
 }
-
+#ifdef _M_ARM64
+bool load_graphics_offsets(bool is32bit, bool isarm64, bool use_hook_address_cache, const char *config_path)
+#else
 bool load_graphics_offsets(bool is32bit, bool use_hook_address_cache, const char *config_path)
+#endif
 {
 	char *offset_exe_path = NULL;
 	struct dstr config_ini = {0};
@@ -157,7 +163,11 @@ bool load_graphics_offsets(bool is32bit, bool use_hook_address_cache, const char
 #endif
 
 	dstr_copy(&offset_exe, "get-graphics-offsets");
+#ifdef _M_ARM64
+	dstr_cat(&offset_exe, isarm64 ? "arm64.exe" : (is32bit ? "32.exe" : "64.exe"));
+#else
 	dstr_cat(&offset_exe, is32bit ? "32.exe" : "64.exe");
+#endif
 	offset_exe_path = obs_module_file(offset_exe.array);
 
 	dstr_init_move_array(&cmd, offset_exe_path);
@@ -188,13 +198,19 @@ bool load_graphics_offsets(bool is32bit, bool use_hook_address_cache, const char
 
 	if (use_hook_address_cache) {
 		dstr_copy(&config_ini, config_path);
+#ifdef _M_ARM64
+		dstr_cat(&config_ini, isarm64 ? "arm64.ini" : (is32bit ? "32.ini" : "64.ini"));
+#else
 		dstr_cat(&config_ini, is32bit ? "32.ini" : "64.ini");
-
+#endif
 		os_quick_write_utf8_file_safe(config_ini.array, str.array, str.len, false, "tmp", NULL);
 		dstr_free(&config_ini);
 	}
-
+#ifdef _M_ARM64
+	success = load_offsets_from_string(isarm64 ? &offsetsarm64 : (is32bit ? &offsets32 : &offsets64), str.array);
+#else
 	success = load_offsets_from_string(is32bit ? &offsets32 : &offsets64, str.array);
+#endif
 	if (!success) {
 		blog(LOG_INFO, "load_graphics_offsets: Failed to load string");
 	}
@@ -217,8 +233,11 @@ bool load_cached_graphics_offsets(bool is32bit, const char *config_path)
 	dstr_cat(&config_ini, is32bit ? "32.ini" : "64.ini");
 	success = load_offsets_from_file(is32bit ? &offsets32 : &offsets64, config_ini.array);
 	if (!success)
+#ifdef _M_ARM64
+		success = load_graphics_offsets(is32bit, false, true, config_path);
+#else
 		success = load_graphics_offsets(is32bit, true, config_path);
-
+#endif
 	dstr_free(&config_ini);
 	return success;
 }
