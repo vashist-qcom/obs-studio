@@ -32,7 +32,11 @@ static update_info_t *update_info = NULL;
 
 extern bool cached_versions_match(void);
 extern bool load_cached_graphics_offsets(bool is32bit, const char *config_path);
+#ifdef _M_ARM64
+extern bool load_graphics_offsets(bool is32bit, bool isarm64, bool use_hook_address_cache, const char *config_path);
+#else
 extern bool load_graphics_offsets(bool is32bit, bool use_hook_address_cache, const char *config_path);
+#endif
 
 /* temporary, will eventually be erased once we figure out how to create both
  * 32bit and 64bit versions of the helpers/hook */
@@ -47,7 +51,18 @@ static const bool use_hook_address_cache = false;
 static DWORD WINAPI init_hooks(LPVOID param)
 {
 	char *config_path = param;
+#ifdef _M_ARM64
+	if (use_hook_address_cache && cached_versions_match() && load_cached_graphics_offsets(IS32BIT, config_path)) {
 
+		load_cached_graphics_offsets(!IS32BIT, config_path);
+		load_cached_graphics_offsets(!IS32BIT, config_path);
+		obs_register_source(&game_capture_info);
+	} else if (load_graphics_offsets(IS32BIT, false, use_hook_address_cache, config_path)) {
+		load_graphics_offsets(!IS32BIT, false, use_hook_address_cache, config_path);
+		load_graphics_offsets(!IS32BIT, true, use_hook_address_cache, config_path);
+	}
+
+#else
 	if (use_hook_address_cache && cached_versions_match() && load_cached_graphics_offsets(IS32BIT, config_path)) {
 
 		load_cached_graphics_offsets(!IS32BIT, config_path);
@@ -56,6 +71,7 @@ static DWORD WINAPI init_hooks(LPVOID param)
 	} else if (load_graphics_offsets(IS32BIT, use_hook_address_cache, config_path)) {
 		load_graphics_offsets(!IS32BIT, use_hook_address_cache, config_path);
 	}
+#endif
 
 	bfree(config_path);
 	return 0;

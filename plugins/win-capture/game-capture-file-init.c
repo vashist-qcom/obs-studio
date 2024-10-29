@@ -133,42 +133,64 @@ static LSTATUS get_reg(HKEY hkey, LPCWSTR sub_key, LPCWSTR value_name, bool b64)
 		StringCbCatW(path, sizeof(path), L"\\");                                      \
 		StringCbCatW(path, sizeof(path), subpath);                                    \
 	} while (false)
+#ifdef _M_ARM64
+#define make_filename(str, name, ext)                                                      \
+	do {                                                                               \
+		StringCbCatW(str, sizeof(str), name);                                      \
+		StringCbCatW(str, sizeof(str), barm64 ? L"arm64" : (b64 ? L"64" : L"32")); \
+		StringCbCatW(str, sizeof(str), ext);                                       \
+	} while (false)
 
+#else
 #define make_filename(str, name, ext)                                \
 	do {                                                         \
 		StringCbCatW(str, sizeof(str), name);                \
 		StringCbCatW(str, sizeof(str), b64 ? L"64" : L"32"); \
 		StringCbCatW(str, sizeof(str), ext);                 \
 	} while (false)
-
+#endif
 /* ------------------------------------------------------------------------- */
 /* function to get the path to the hook                                      */
 
 static bool programdata64_hook_exists = false;
 static bool programdata32_hook_exists = false;
-
+#ifdef _M_ARM64
+static bool programdataarm64_hook_exists = false;
+char *get_hook_path(bool b64, bool barm64)
+#else
 char *get_hook_path(bool b64)
+#endif
 {
 	wchar_t path[MAX_PATH];
 
 	get_programdata_path(path, L"obs-studio-hook\\");
 	make_filename(path, L"graphics-hook", L".dll");
 
-	if ((b64 && programdata64_hook_exists) || (!b64 && programdata32_hook_exists)) {
+	if ((b64 && programdata64_hook_exists) || (!b64 && programdata32_hook_exists)
+#ifdef _M_ARM64
+	    || (barm64 && programdataarm64_hook_exists)
+#endif
+	){
 		char *path_utf8 = NULL;
 		os_wcs_to_utf8_ptr(path, 0, &path_utf8);
 		return path_utf8;
 	}
-
+#ifdef _M_ARM64
+	return obs_module_file(barm64 ? "graphics-hookarm64.dll" : (b64 ? "graphics-hook64.dll" : "graphics-hook32.dll"));
+#else
 	return obs_module_file(b64 ? "graphics-hook64.dll" : "graphics-hook32.dll");
+#endif
 }
 
 /* ------------------------------------------------------------------------- */
 /* initialization                                                            */
 
 #define IMPLICIT_LAYERS L"SOFTWARE\\Khronos\\Vulkan\\ImplicitLayers"
-
+#ifdef _M_ARM64
+static bool update_hook_file(bool b64, bool barm64)
+#else
 static bool update_hook_file(bool b64)
+#endif
 {
 	wchar_t temp[MAX_PATH];
 	wchar_t src[MAX_PATH];
@@ -250,7 +272,11 @@ static bool update_hook_file(bool b64)
 #define warn(format, ...) blog(LOG_WARNING, "%s: " format, "[Vulkan Capture Init]", ##__VA_ARGS__)
 
 /* Sets vulkan layer registry if it doesn't already exist */
+#ifdef _M_ARM64
+static void init_vulkan_registry(bool b64, bool barm64)
+#else
 static void init_vulkan_registry(bool b64)
+#endif
 {
 	DWORD flags = b64 ? KEY_WOW64_64KEY : KEY_WOW64_32KEY;
 	HKEY key = NULL;
@@ -310,6 +336,20 @@ finish:
 
 void init_hook_files()
 {
+#ifdef _M_ARM64
+	if (update_hook_file(true, true)) {
+		programdataarm64_hook_exists = true;
+		init_vulkan_registry(true, true);
+	}
+	if (update_hook_file(true, false)) {
+		programdata64_hook_exists = true;
+		init_vulkan_registry(true, false);
+	}
+	if (update_hook_file(false, false)) {
+		programdata32_hook_exists = true;
+		init_vulkan_registry(false, false);
+	}
+#else
 	if (update_hook_file(true)) {
 		programdata64_hook_exists = true;
 		init_vulkan_registry(true);
@@ -318,4 +358,5 @@ void init_hook_files()
 		programdata32_hook_exists = true;
 		init_vulkan_registry(false);
 	}
+#endif
 }

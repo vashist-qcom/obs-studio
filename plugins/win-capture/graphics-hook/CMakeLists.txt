@@ -62,6 +62,19 @@ if(OBS_PARENT_ARCHITECTURE STREQUAL CMAKE_VS_PLATFORM_NAME)
       COMMAND "${CMAKE_COMMAND}" --build ${CMAKE_SOURCE_DIR}/build_x86 --config $<CONFIG> -t graphics-hook
       COMMENT "Build x86 graphics-hook"
     )
+    elseif(CMAKE_VS_PLATFORM_NAME STREQUAL ARM64)
+    add_custom_command(
+      TARGET graphics-hook
+      POST_BUILD
+      COMMAND "${CMAKE_COMMAND}" --build ${CMAKE_SOURCE_DIR}/build_x86 --config $<CONFIG> -t graphics-hook
+      COMMENT "Build x86 graphics-hook"
+    )
+    add_custom_command(
+      TARGET graphics-hook
+      POST_BUILD
+      COMMAND "${CMAKE_COMMAND}" --build ${CMAKE_SOURCE_DIR}/build_x64 --config $<CONFIG> -t graphics-hook
+      COMMENT "Build x64 graphics-hook"
+    )
   endif()
 
   add_dependencies(win-capture graphics-hook)
@@ -69,6 +82,8 @@ endif()
 
 if(CMAKE_VS_PLATFORM_NAME STREQUAL x64)
   set(_OUTPUT_NAME graphics-hook64)
+elseif(CMAKE_VS_PLATFORM_NAME STREQUAL ARM64)
+  set(_OUTPUT_NAME graphics-hookarm64)
 else()
   set(_OUTPUT_NAME graphics-hook32)
 endif()
