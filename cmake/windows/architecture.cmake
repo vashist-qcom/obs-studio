@@ -5,7 +5,7 @@ include_guard(GLOBAL)
 include(compilerconfig)
 
 if(NOT DEFINED OBS_PARENT_ARCHITECTURE)
-  if(CMAKE_VS_PLATFORM_NAME MATCHES "(Win32|x64)")
+  if(CMAKE_VS_PLATFORM_NAME MATCHES "(Win32|x64|ARM64)")
     set(OBS_PARENT_ARCHITECTURE ${CMAKE_VS_PLATFORM_NAME})
   else()
     message(FATAL_ERROR "Unsupported generator platform for Windows builds: ${CMAKE_VS_PLATFORM_NAME}!")
